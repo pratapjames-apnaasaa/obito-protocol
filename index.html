@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Obito Protocol</title>
+<meta name="description" content="Daily physique and recovery protocol tracker">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#6366f1">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root{
+    --bg:#f5f7fb; --surface:#ffffff; --surface-2:#eef1f7; --border:#e2e6ef;
+    --text:#141821; --text-dim:#5b6373; --text-faint:#8791a1;
+    --ring-track:#e7ebf3;
+    --accent:#6366f1; --accent-soft:#e8e8fd;
+    --c-protein:#16a34a; --c-protein-soft:#dcf5e6;
+    --c-training:#ea580c; --c-training-soft:#ffe8da;
+    --c-recovery:#8b5cf6; --c-recovery-soft:#efe7fd;
+    --c-med:#e11d48; --c-med-soft:#fde0e6;
+    --c-sleep:#2563eb; --c-sleep-soft:#dfeafe;
+    --good:#16a34a; --good-soft:#dcf5e6;
+    --warn:#d97706; --warn-soft:#fdecd0;
+    --critical:#dc2626; --critical-soft:#fde1de;
+    --shadow: 0 1px 2px rgba(20,20,30,.05), 0 10px 28px -14px rgba(20,20,30,.16);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0b0e14; --surface:#151a23; --surface-2:#1c2330; --border:#2a3241;
+      --text:#eef1f6; --text-dim:#9aa4b5; --text-faint:#6b7688;
+      --ring-track:#232b39;
+      --accent:#818cf8; --accent-soft:#232244;
+      --c-protein:#34d399; --c-protein-soft:#123524;
+      --c-training:#ff8a5c; --c-training-soft:#3a2015;
+      --c-recovery:#a78bfa; --c-recovery-soft:#2a2140;
+      --c-med:#fb7185; --c-med-soft:#3a1620;
+      --c-sleep:#60a5fa; --c-sleep-soft:#152238;
+      --good:#34d399; --good-soft:#123524;
+      --warn:#fbbf24; --warn-soft:#3a2c10;
+      --critical:#f87171; --critical-soft:#3a1a18;
+      --shadow: 0 1px 2px rgba(0,0,0,.35), 0 14px 34px -16px rgba(0,0,0,.6);
+      color-scheme: dark;
+    }
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:"Plus Jakarta Sans", -apple-system, "Segoe UI", sans-serif;
+    line-height:1.5; -webkit-font-smoothing:antialiased;
+    padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+  }
+  h1,h2,h3,.ring .ring-val,.rl-big{ font-family:"Outfit","Plus Jakarta Sans",sans-serif; }
+  .mono,.num,td.num{ font-family:"IBM Plex Mono","SFMono-Regular",Consolas,monospace; font-variant-numeric:tabular-nums; }
+  h1,h2,h3{text-wrap:balance;}
+  a{color:var(--accent);}
+  button{font-family:inherit;}
+
+  .wrap{max-width:1120px; margin:0 auto; padding:24px 20px 100px;}
+
+  /* connect gate */
+  .gate{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; text-align:center;}
+  .gate-card{max-width:360px;}
+  .gate-mark{width:64px;height:64px;border-radius:20px;margin:0 auto 18px;background:linear-gradient(135deg,#6366f1,#4338ca);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);}
+  .gate-mark svg{width:32px;height:32px;color:#fff;}
+  .gate h1{font-size:1.3rem;font-weight:800;margin:0 0 8px;}
+  .gate p{color:var(--text-dim);font-size:.9rem;margin:0 0 22px;}
+  .gate-btn{
+    display:inline-flex; align-items:center; gap:10px; background:var(--accent); color:#fff; border:none;
+    border-radius:999px; padding:13px 24px; font-size:.92rem; font-weight:700; cursor:pointer;
+    box-shadow:0 10px 24px -10px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+  .gate-btn svg{width:18px;height:18px;}
+  .gate-msg{margin-top:14px;font-size:.8rem;color:var(--critical);min-height:1.2em;}
+  .gate-note{margin-top:18px;font-size:.72rem;color:var(--text-faint);}
+  [hidden]{display:none !important;}
+
+  header.top{ display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; margin-bottom:18px; }
+  .identity .eyebrow{ font-size:.72rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); margin:0 0 4px; }
+  .identity h1{font-size:1.5rem; font-weight:800; margin:0 0 3px; letter-spacing:-.01em; font-family:"Outfit",sans-serif;}
+  .identity .sub{font-size:.82rem; color:var(--text-dim);}
+  .hdr-actions{display:flex; align-items:center; gap:10px;}
+  .synctag{
+    display:inline-flex; align-items:center; gap:6px; font-size:.7rem; font-weight:600; color:var(--text-faint);
+    border:1px solid var(--border); border-radius:999px; padding:5px 11px; background:var(--surface);
+  }
+  .synctag .sdot{width:6px;height:6px;border-radius:50%;background:var(--good);}
+  .synctag.saving .sdot{background:var(--warn);}
+  .synctag.err .sdot{background:var(--critical);}
+  .logbtn{
+    display:inline-flex; align-items:center; gap:8px; background:var(--accent); color:#fff;
+    border:none; border-radius:999px; padding:11px 20px 11px 16px; font-size:.86rem; font-weight:700;
+    cursor:pointer; box-shadow:0 8px 20px -8px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+  .logbtn svg{width:18px;height:18px;}
+
+  .stale-banner{ display:flex; align-items:center; gap:10px; background:var(--warn-soft); color:var(--warn); border-radius:12px; padding:10px 14px; font-size:.82rem; margin-bottom:20px; font-weight:500; }
+  .privacy-tag{ margin-left:auto; font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; color:var(--text-faint); border:1px solid var(--border); border-radius:999px; padding:3px 10px; white-space:nowrap; background:var(--surface); }
+
+  .rings{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:14px;}
+  @media (max-width:720px){.rings{grid-template-columns:1fr;}}
+  .ring-card{ background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:18px; display:flex; align-items:center; gap:16px; box-shadow:var(--shadow); }
+  .ring{ --pct:0; width:88px; height:88px; border-radius:50%; flex:none; position:relative; background:conic-gradient(var(--ring-color) calc(var(--pct)*3.6deg), var(--ring-track) 0deg); display:flex; align-items:center; justify-content:center; }
+  .ring::before{content:""; position:absolute; inset:8px; border-radius:50%; background:var(--surface);}
+  .ring .ring-val{position:relative; z-index:1; font-size:1.1rem; font-weight:700; color:var(--text);}
+  .ring-body{flex:1; min-width:0;}
+  .ring-body .rl-label{display:flex; align-items:center; gap:6px; font-size:.72rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint);}
+  .ring-body .rl-label svg{width:14px;height:14px;}
+  .ring-body .rl-big{font-size:1.35rem; font-weight:800; margin-top:4px;}
+  .ring-body .rl-note{font-size:.78rem; color:var(--text-dim); margin-top:2px;}
+
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-bottom:22px;}
+  .tile{ background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:14px 16px; box-shadow:var(--shadow); display:flex; gap:12px; align-items:flex-start; }
+  .tile .ic{width:34px; height:34px; border-radius:10px; flex:none; display:flex; align-items:center; justify-content:center;}
+  .tile .ic svg{width:18px;height:18px;}
+  .tile .tt{font-size:.68rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-faint);}
+  .tile .tv{font-size:1rem; font-weight:700; margin-top:2px; font-family:"Outfit",sans-serif;}
+  .tile .tn{font-size:.78rem; color:var(--text-dim); margin-top:2px;}
+
+  .grid{display:grid; grid-template-columns:1.15fr 1fr; gap:16px; align-items:start;}
+  @media (max-width:880px){.grid{grid-template-columns:1fr;}}
+  .col{display:flex; flex-direction:column; gap:16px;}
+
+  section.card{ background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:20px 22px; box-shadow:var(--shadow); }
+  section.card h2{ font-size:1rem; font-weight:800; margin:0 0 14px; display:flex; align-items:center; gap:8px; color:var(--text); font-family:"Outfit",sans-serif; }
+  section.card h2 .n{color:var(--text-faint); font-weight:500; font-size:.85rem; font-family:"Plus Jakarta Sans",sans-serif;}
+  section.card p{margin:0 0 10px; font-size:.9rem; color:var(--text-dim);}
+  section.card p:last-child{margin-bottom:0;}
+  section.card p strong{color:var(--text); font-weight:700;}
+
+  .badge{ display:inline-flex; align-items:center; gap:5px; font-size:.68rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:4px 10px; border-radius:999px; }
+  .badge.good{background:var(--good-soft); color:var(--good);}
+  .badge.warn{background:var(--warn-soft); color:var(--warn);}
+  .badge.critical{background:var(--critical-soft); color:var(--critical);}
+  .badge.recovery{background:var(--c-recovery-soft); color:var(--c-recovery);}
+  .badge.neutral{background:var(--surface-2); color:var(--text-faint);}
+
+  .kv{display:grid; grid-template-columns:auto 1fr; gap:5px 12px; font-size:.85rem; margin:12px 0;}
+  .kv dt{color:var(--text-faint); font-size:.72rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding-top:2px;}
+  .kv dd{margin:0; color:var(--text);}
+
+  .timeline{list-style:none; margin:14px 0 0; padding:0; border-left:2px solid var(--border);}
+  .timeline li{position:relative; padding:0 0 14px 18px;}
+  .timeline li:last-child{padding-bottom:0;}
+  .timeline li::before{ content:""; position:absolute; left:-6px; top:4px; width:10px; height:10px; border-radius:50%; background:var(--surface); border:2px solid var(--c-recovery); }
+  .timeline li.flag::before{border-color:var(--critical); background:var(--critical);}
+  .timeline .t-date{font-family:"IBM Plex Mono",monospace; font-size:.72rem; color:var(--text-faint); display:block;}
+  .timeline .t-text{font-size:.86rem; color:var(--text-dim);}
+
+  .rule-box{ background:var(--c-recovery-soft); border-radius:12px; padding:12px 14px; font-size:.82rem; color:var(--text-dim); margin-top:14px; }
+  .rule-box.training{background:var(--c-training-soft);}
+  .rule-box.neutral{background:var(--surface-2);}
+  .rule-box .lbl{color:var(--text); font-weight:700; font-size:.68rem; letter-spacing:.06em; text-transform:uppercase; display:block; margin-bottom:4px;}
+
+  .sched{list-style:none; margin:0; padding:0;}
+  .sched li{display:grid; grid-template-columns:70px 1fr; gap:12px; padding:10px 0; border-top:1px dashed var(--border);}
+  .sched li:first-child{border-top:none;}
+  .sched .time{font-family:"IBM Plex Mono",monospace; font-size:.74rem; color:var(--c-med); font-weight:600; padding-top:2px;}
+  .sched .what{font-size:.86rem; color:var(--text);}
+  .sched .note{display:block; font-size:.76rem; color:var(--text-faint); margin-top:2px;}
+
+  .chart{display:flex; align-items:flex-end; gap:14px; height:130px; margin:18px 0 6px; padding:0 4px;}
+  .bar-col{flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; position:relative;}
+  .bar{width:100%; max-width:46px; border-radius:8px 8px 3px 3px; background:var(--c-protein); position:relative;}
+  .bar.hit::after{content:"✓"; position:absolute; top:-18px; left:50%; transform:translateX(-50%); font-size:.7rem; color:var(--c-protein); font-weight:700;}
+  .bar-col .lo{font-size:.62rem; color:var(--text-faint); font-family:"IBM Plex Mono",monospace; position:absolute; bottom:100%; margin-bottom:2px; white-space:nowrap;}
+  .bar-col .day{font-size:.68rem; color:var(--text-faint); margin-top:8px; font-family:"IBM Plex Mono",monospace;}
+  .target-line{position:relative; border-top:1px dashed var(--c-protein); margin:0 4px 4px; opacity:.5;}
+  .target-line span{position:absolute; right:0; top:-9px; font-size:.62rem; color:var(--c-protein); background:var(--surface); padding:0 4px; font-family:"IBM Plex Mono",monospace;}
+
+  table{width:100%; border-collapse:collapse; font-size:.83rem; margin-top:8px;}
+  th{text-align:left; font-size:.66rem; letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); font-weight:700; padding:0 8px 8px 0; border-bottom:1px solid var(--border);}
+  td{padding:8px 8px 8px 0; border-bottom:1px solid var(--border); color:var(--text-dim); vertical-align:top;}
+  td:first-child{color:var(--text); font-weight:600;}
+  tr:last-child td{border-bottom:none;}
+  .tablewrap{overflow-x:auto;}
+
+  .chiplist{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
+  .chiplist .chip{font-size:.72rem; color:var(--text-dim); background:var(--surface-2); border-radius:999px; padding:4px 11px;}
+
+  .pending-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px;}
+  .pending-list li{display:flex; gap:10px; align-items:flex-start; font-size:.85rem; color:var(--text-dim); background:var(--surface-2); border-radius:10px; padding:9px 12px;}
+  .pending-list .flagdot{margin-top:5px; flex:none; width:8px; height:8px; border-radius:50%;}
+  .pending-list .flagdot.critical{background:var(--critical);}
+  .pending-list .flagdot.warn{background:var(--warn);}
+
+  details.logentry{ border:1px solid var(--border); border-radius:14px; margin-bottom:8px; background:var(--surface); overflow:hidden; }
+  details.logentry summary{ list-style:none; cursor:pointer; padding:12px 16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  details.logentry summary::-webkit-details-marker{display:none;}
+  details.logentry summary .arrow{margin-left:auto; color:var(--text-faint); transition:transform .15s ease; font-size:.8rem;}
+  details.logentry[open] summary .arrow{transform:rotate(90deg);}
+  details.logentry summary .d-date{font-family:"IBM Plex Mono",monospace; font-size:.78rem; color:var(--accent); font-weight:700; min-width:80px;}
+  details.logentry summary .d-protein{font-size:.8rem; color:var(--text-dim); font-family:"IBM Plex Mono",monospace;}
+  details.logentry .d-body{padding:0 16px 16px; font-size:.85rem; color:var(--text-dim); border-top:1px solid var(--border); padding-top:12px;}
+  details.logentry .d-body p{margin:0 0 8px;}
+
+  footer{ margin-top:32px; padding-top:16px; border-top:1px solid var(--border); font-size:.76rem; color:var(--text-faint); display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+
+  .fab{ position:fixed; right:20px; bottom:calc(20px + env(safe-area-inset-bottom)); width:56px; height:56px; border-radius:50%; background:var(--accent); color:#fff; border:none; display:none; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 10px 26px -8px color-mix(in srgb, var(--accent) 75%, transparent); z-index:20; }
+  .fab svg{width:24px;height:24px;}
+  @media (max-width:640px){ .logbtn{display:none;} .fab{display:flex;} }
+
+  dialog#logDialog{ border:none; border-radius:20px; padding:0; width:min(520px,92vw); background:var(--surface); color:var(--text); box-shadow:0 24px 60px -20px rgba(0,0,0,.4); }
+  dialog#logDialog::backdrop{background:rgba(10,12,18,.55);}
+  .dlg-head{display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid var(--border);}
+  .dlg-head h3{margin:0; font-size:1.05rem; font-weight:800; font-family:"Outfit",sans-serif;}
+  .dlg-close{background:var(--surface-2); border:none; width:30px; height:30px; border-radius:50%; color:var(--text-dim); cursor:pointer; font-size:1rem; line-height:1;}
+  .dlg-body{padding:18px 20px; display:flex; flex-direction:column; gap:14px; max-height:65vh; overflow-y:auto;}
+  .field label{display:block; font-size:.72rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--text-faint); margin-bottom:6px;}
+  .field input[type="text"], .field input[type="number"], .field input[type="date"], .field select, .field textarea{
+    width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:9px 11px; font-size:.9rem; color:var(--text); font-family:inherit;
+  }
+  .field textarea{resize:vertical; min-height:70px;}
+  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .check-row{display:flex; align-items:center; gap:8px; font-size:.86rem; color:var(--text-dim);}
+  .dlg-foot{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:16px 20px; border-top:1px solid var(--border);}
+  .dlg-msg{font-size:.8rem; color:var(--critical); flex:1;}
+  .dlg-save{background:var(--accent); color:#fff; border:none; border-radius:999px; padding:10px 20px; font-weight:700; font-size:.88rem; cursor:pointer;}
+  .dlg-save:disabled{opacity:.6; cursor:default;}
+
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  @media (prefers-reduced-motion:reduce){*{transition:none !important;}}
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <div class="gate-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2c1 4-3 5-3 9a3 3 0 006 0c0-1-.5-2-1-2 1.5 1 3 3 3 5a5 5 0 01-10 0c0-4 3-6 3-9 0-1.2.5-2.3 2-3z"/></svg></div>
+    <h1>Obito Protocol</h1>
+    <p>Your data lives in a private file in your own Google Drive. Connect once to load and save it from this device.</p>
+    <button class="gate-btn" id="connectBtn" type="button">
+      <svg viewBox="0 0 24 24"><path fill="#fff" d="M12.24 10.4v3.53h5.14c-.22 1.35-1.6 3.96-5.14 3.96-3.1 0-5.63-2.56-5.63-5.72s2.53-5.72 5.63-5.72c1.76 0 2.95.75 3.63 1.4l2.48-2.4C16.9 3.9 14.77 3 12.24 3 7.1 3 3 7.1 3 12.17s4.1 9.17 9.24 9.17c5.33 0 8.86-3.75 8.86-9.03 0-.6-.07-1.07-.15-1.53h-8.7z"/></svg>
+      Connect Google Drive
+    </button>
+    <p class="gate-msg" id="gateMsg"></p>
+    <p class="gate-note">Uses the Drive "app data" scope — this app can only see files it creates itself, never the rest of your Drive.</p>
+  </div>
+</div>
+
+<div class="wrap" id="app" hidden></div>
+
+<button class="fab" id="fabBtn" type="button" aria-label="Log today" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+</button>
+
+<dialog id="logDialog">
+  <form id="logForm">
+    <div class="dlg-head">
+      <h3>Log today</h3>
+      <button type="button" class="dlg-close" id="dlgCloseBtn" aria-label="Close">✕</button>
+    </div>
+    <div class="dlg-body">
+      <div class="field-row">
+        <div class="field"><label for="f-date">Date</label><input type="date" id="f-date" name="date" required></div>
+        <div class="field"><label for="f-gym">Training</label>
+          <select id="f-gym" name="gym">
+            <option value="">Rest day</option>
+            <option value="EMS legs/core">Gym — EMS legs/core</option>
+            <option value="EMS full">Gym — EMS full body</option>
+            <option value="Weights">Gym — free weights</option>
+            <option value="Other">Gym — other</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="f-protein">Protein today (g)</label><input type="number" id="f-protein" name="protein" min="0" max="400" placeholder="e.g. 158"></div>
+        <div class="field"><label for="f-shoulder">Shoulder note</label><input type="text" id="f-shoulder" name="shoulder" placeholder="optional"></div>
+      </div>
+      <div class="field"><label for="f-notes">Meals, workout detail, anything else</label>
+        <textarea id="f-notes" name="notes" placeholder="e.g. Breakfast: omelette + toast (~20g). Leg press 95kg x12. Lunch: dal + rice (~18g)..."></textarea>
+      </div>
+      <label class="check-row"><input type="checkbox" id="f-arv" name="arv" checked> ARV taken today (keeps the streak)</label>
+    </div>
+    <div class="dlg-foot">
+      <span class="dlg-msg" id="dlgMsg"></span>
+      <button type="submit" class="dlg-save" id="dlgSaveBtn">Save entry</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+/* ====================================================================
+   Fill this in after creating your OAuth Client ID in Google Cloud
+   Console (APIs & Services -> Credentials -> Create Credentials ->
+   OAuth client ID -> Web application). Paste the "...apps.googleusercontent.com"
+   value below. This ID is public by design (not a secret) for this
+   browser-side flow.
+==================================================================== */
+const GOOGLE_CLIENT_ID = "YOUR_CLIENT_ID.apps.googleusercontent.com";
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const STATE_FILENAME = "obito-protocol-state.json";
+const LS_FILE_ID = "obito_drive_file_id";
+const SS_TOKEN = "obito_access_token";
+const SS_TOKEN_EXP = "obito_token_expiry";
+
+const DEFAULT_STATE = {
+  profile: {name:"Pratap James", age:52, weight:"67kg", height:"177.8cm", location:"Nizampet, Hyderabad", day1:"Apr 23, 2026"},
+  currentDay: 117, arvStreak: 117, proteinTarget: 155,
+  lastSession: {day:117, date:"Aug 15", type:"EMS legs/core"},
+  shoulderNote: "Mild ache, 2/2 sessions — worth raising with Dr. Sudharshan.",
+  pending: [
+    {text:"Raise the recurring chest-press ache with Dr. Sudharshan — two sessions now, don't just keep self-monitoring.", sev:"critical"},
+    {text:"Confirm whether Volini was substituted for Vovitra gel; check with the doctor first if so.", sev:"critical"},
+    {text:"Book hepatologist — Dr. Rangareddy.", sev:"critical"},
+    {text:"Tell Dr. Lalith Agarwal the statin was declined.", sev:"critical"},
+    {text:"Lipid recheck — due this month, not yet booked.", sev:"critical"},
+    {text:"Restock check: MitoPrime 10mg, NMN 250mg, Arjuna bark, Ubiquinol.", sev:"critical"},
+    {text:"Dentist (tooth #7, deprioritised) · Glasses.", sev:"warn"}
+  ],
+  log: [
+    {day:117, date:"Aug 15", gym:"EMS legs/core", protein:158, proteinLabel:"151–165g", notes:"Up 7:00, UC-II + water, 12min meditation, 3.5k walk. Breakfast: omelette + toast + butter (~18–20g). 10:15 ARV + whey stack (~54g). Gym: bodyweight squats, 10kg DB squats, leg extension EMS 29kg×12/12, leg press EMS 95kg×12, lying leg raises 25/16, chest press 23kg×12 — slight ache again, stopped at 1 set. Lunch: hyper rice + mutton kheema + buttermilk (~25–28g). Dinner: dosa + kheema (~12–15g). Night: casein stack (~40–44g). Total ~151–165g — target hit, 3rd strong day running."},
+    {day:116, date:"Aug 14", gym:"", protein:162, proteinLabel:"154–170g", notes:"Up 7:00, UC-II + water, 10min meditation, 4.9k walk. Breakfast: rava upma + egg white scramble (~15–17g). 10:00 ARV + whey stack (~54g). Lunch: hyper rice + beerakaya mutton curry (~25–30g). Dinner: leftover mutton curry + 2 chapatis (~20–25g). Night: casein stack (~40–44g). Total ~154–170g — best day of the stretch."},
+    {day:115, date:"Aug 13", gym:"", protein:154, proteinLabel:"152–156g", notes:"Up 7:30, UC-II + water, 7min meditation, 3.3k walk. Breakfast: egg + cheese + toast + butter (~27g). 10:00 ARV + whey stack (~54g). Lunch: hyper rice + rasam + pomfret fry (~22g). Dinner: khichdi + curd (~9g). Night: casein stack (~40–44g). Total ~152–156g — target hit. Discussed swapping Vovitra for Volini — advised to check with Dr. Sudharshan first."},
+    {day:114, date:"Aug 12", gym:"EMS legs/core", protein:null, proteinLabel:"no total logged", notes:"Up 5:00, UC-II + water, 9min meditation, 3.8k walk. Gym restart after an 8-day idle stretch: leg press EMS 95kg×13, seated calf raises 30kg×20/16, lying leg raises 25/16, chest press (non-EMS) 23kg×10/10 — blunt ache set 1, eased set 2, stopped at 2 sets. Note: EMS suit was initially set with shoulder/chest pads active — caught and zeroed mid-session, a reminder to check pad zones before starting."},
+    {day:113, date:"Aug 11", gym:"", protein:null, proteinLabel:"no total logged", notes:"Up 5:00, UC-II + water, 9min meditation. Breakfast: paya dosa + sambar. Lunch: hyper rice + menthikura pappu + aloo baigan fry + buttermilk. Dinner: leftover rice + pappu + paneer bhurji. Day 7 idle — no gym."},
+    {day:112, date:"Aug 10", gym:"", protein:null, proteinLabel:"no total logged", notes:"No gym. Lunch: hyper rice + ghee + sambhar + bhindi fry (~15–18g). Dinner: hyper rice + ghee + sambhar + 2-egg omelette (~18–20g). Shoulder: pain similar to prior weeks, slightly more range of motion noted — first improvement in several weeks."}
+  ],
+  lastUpdatedLabel: "Aug 15, 2026"
+};
+
+const ICONS = {
+  flame: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2c1 4-3 5-3 9a3 3 0 006 0c0-1-.5-2-1-2 1.5 1 3 3 3 5a5 5 0 01-10 0c0-4 3-6 3-9 0-1.2.5-2.3 2-3z"/></svg>',
+  leaf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 21c9 0 14-5 14-14V5h-2C8 5 3 10 3 19v2"/><path d="M5 21c0-5 3-9 8-11"/></svg>',
+  dumbbell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9v6M2 10v4M20 9v6M22 10v4M7 12h10"/><path d="M7 9v6M17 9v6"/></svg>',
+  pulse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>',
+  flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18M5 4h11l-2 4 2 4H5"/></svg>',
+  calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>'
+};
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+function ring(pct, color, valueLabel){
+  const p = Math.max(0, Math.min(100, pct));
+  return `<div class="ring" style="--pct:${p}; --ring-color:${color}"><span class="ring-val">${esc(valueLabel)}</span></div>`;
+}
+
+function renderRings(state){
+  const proteinToday = state.log[0] && state.log[0].protein ? state.log[0].protein : null;
+  const proteinPct = proteinToday ? Math.round(proteinToday/state.proteinTarget*100) : 0;
+  const sevenDaysAgo = state.currentDay - 7;
+  const sessions = state.log.filter(d => d.gym && d.day > sevenDaysAgo).length;
+  const trainPct = Math.min(100, Math.round(sessions/2*100));
+  const arvPct = state.arvStreak > 0 ? 100 : 0;
+  return `<div class="rings">
+    <div class="ring-card">${ring(proteinPct,'var(--c-protein)', proteinToday ? proteinToday+'g' : '—')}
+      <div class="ring-body"><div class="rl-label">${ICONS.leaf} Protein</div><div class="rl-big" style="color:var(--c-protein)">${proteinToday ? proteinPct+'%' : 'No log yet'}</div><div class="rl-note">of ${state.proteinTarget}g target</div></div></div>
+    <div class="ring-card">${ring(trainPct,'var(--c-training)', sessions+'/2')}
+      <div class="ring-body"><div class="rl-label">${ICONS.dumbbell} Training</div><div class="rl-big" style="color:var(--c-training)">${sessions} session${sessions===1?'':'s'}</div><div class="rl-note">last 7 days · 2x/week goal</div></div></div>
+    <div class="ring-card">${ring(arvPct, state.arvStreak>0?'var(--c-med)':'var(--critical)', state.arvStreak)}
+      <div class="ring-body"><div class="rl-label">${ICONS.flame} ARV streak</div><div class="rl-big" style="color:${state.arvStreak>0?'var(--c-med)':'var(--critical)'}">${state.arvStreak} day${state.arvStreak===1?'':'s'}</div><div class="rl-note">Dolutegravir + Emtricitabine</div></div></div>
+  </div>`;
+}
+
+function renderTiles(state){
+  const last = state.log[0];
+  return `<div class="tiles">
+    <div class="tile"><div class="ic" style="background:var(--c-recovery-soft); color:var(--c-recovery)">${ICONS.pulse}</div>
+      <div><div class="tt">Right shoulder</div><div class="tv">Frozen shoulder — ongoing</div><div class="tn">${esc(state.shoulderNote)}</div></div></div>
+    <div class="tile"><div class="ic" style="background:var(--c-training-soft); color:var(--c-training)">${ICONS.calendar}</div>
+      <div><div class="tt">Last session</div><div class="tv">D${last.day} · ${esc(last.date)}</div><div class="tn">${last.gym ? esc(last.gym) : 'Rest day logged'}</div></div></div>
+    <div class="tile"><div class="ic" style="background:var(--critical-soft); color:var(--critical)">${ICONS.flag}</div>
+      <div><div class="tt">Open actions</div><div class="tv">${state.pending.length} flagged</div><div class="tn">Doctor calls, lipid recheck, restock</div></div></div>
+  </div>`;
+}
+
+function renderChart(state){
+  const recent = state.log.filter(d => d.protein).slice(0,3).reverse();
+  if(!recent.length) return `<p>No protein totals logged yet — add one from "Log today".</p>`;
+  const max = Math.max(state.proteinTarget, ...recent.map(d=>d.protein)) * 1.15;
+  const bars = recent.map(d => {
+    const h = Math.round(d.protein/max*100);
+    const hit = d.protein >= state.proteinTarget;
+    return `<div class="bar-col"><span class="lo">${esc(d.proteinLabel||d.protein+'g')}</span><div class="bar${hit?' hit':''}" style="height:${h}%"></div><span class="day">D${d.day}</span></div>`;
+  }).join('');
+  const targetTop = 100 - Math.round(state.proteinTarget/max*100);
+  return `<div class="chart"><div class="target-line" style="position:absolute; width:calc(100% - 44px); top:${targetTop}%;"><span>${state.proteinTarget}g target</span></div>${bars}</div>`;
+}
+
+function renderLog(state){
+  return state.log.map((d,i) => `<details class="logentry"${i===0?' open':''}>
+    <summary><span class="d-date">D${d.day} · ${esc(d.date)}</span>
+      <span class="badge ${d.gym ? 'good' : 'neutral'}">${d.gym ? 'Gym — '+esc(d.gym) : 'Rest'}</span>
+      <span class="d-protein">${esc(d.proteinLabel || (d.protein ? d.protein+'g' : 'no total logged'))}</span>
+      <span class="arrow">▸</span></summary>
+    <div class="d-body"><p>${esc(d.notes)}</p></div>
+  </details>`).join('');
+}
+
+function renderPending(state){
+  return state.pending.map(p => `<li><span class="flagdot ${p.sev}"></span>${esc(p.text)}</li>`).join('');
+}
+
+function renderApp(state){
+  const stale = state.log[0] ? `Log last updated ${esc(state.log[0].date)}, 2026 (Day ${state.log[0].day}).` : 'No entries yet.';
+  return `
+<header class="top">
+  <div class="identity">
+    <p class="eyebrow">Obito Protocol</p>
+    <h1>${esc(state.profile.name)}</h1>
+    <p class="sub">${state.profile.age} · ${esc(state.profile.weight)} · ${esc(state.profile.height)} · ${esc(state.profile.location)}</p>
+  </div>
+  <div class="hdr-actions">
+    <span class="synctag" id="syncTag"><span class="sdot"></span><span id="syncTxt">Synced</span></span>
+    <button class="logbtn" id="logBtn" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Log today
+    </button>
+  </div>
+</header>
+
+<div class="stale-banner">
+  <span>⚠</span>
+  <span>${stale} Day ${state.currentDay} of the protocol, started ${esc(state.profile.day1)}.</span>
+  <span class="privacy-tag">🔒 your Drive only</span>
+</div>
+
+${renderRings(state)}
+${renderTiles(state)}
+
+<div class="grid">
+  <div class="col">
+    <section class="card">
+      <h2>Frozen shoulder <span class="badge recovery">ongoing</span></h2>
+      <div class="kv">
+        <dt>Diagnosis</dt><dd>Adhesive capsulitis, right shoulder — Dr. Sudharshan Reddy Bellur, Landmark Hospitals Nizampet, Jul 31 2026. X-ray clear, rotator cuff intact.</dd>
+        <dt>Rehab</dt><dd>3-month self-directed physio: pendulum swings, wall climbing, circumduction, pulley work, end-range stretching + Vovitra gel + hot fomentation, daily.</dd>
+        <dt>Clearance</dt><dd>Legs full intensity. Upper body: light, front-of-body pressing only. No pulling, no shoulder-specific work, no upper-body EMS.</dd>
+      </div>
+      <div class="rule-box"><span class="lbl">Watching</span>${esc(state.shoulderNote)}</div>
+      <p style="margin-top:14px; font-size:.8rem;"><strong>Timeline</strong></p>
+      <ul class="timeline">
+        <li><span class="t-date">D54 · Jun 15</span><span class="t-text">First right-arm zap.</span></li>
+        <li><span class="t-date">D63–D71 · Jun 24–Jul 2</span><span class="t-text">EMS + 4 physio sessions — both made it worse; physio stopped.</span></li>
+        <li><span class="t-date">D101 · Jul 31</span><span class="t-text">Ortho diagnosis: frozen shoulder confirmed.</span></li>
+        <li><span class="t-date">D106 · Aug 4</span><span class="t-text">Gym restarted; chest press stopped at a nerve-pull sensation.</span></li>
+        <li><span class="t-date">D112 · Aug 10</span><span class="t-text">First noted improvement in range of motion.</span></li>
+        <li class="flag"><span class="t-date">D114 → D117</span><span class="t-text">Chest press 23kg, mild ache both sessions — the pattern now worth flagging to the doctor.</span></li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Open actions</h2>
+      <ul class="pending-list">${renderPending(state)}</ul>
+    </section>
+
+    <section class="card">
+      <h2>Training <span class="n">— rhythm &amp; PBs</span></h2>
+      <p>D106 restart (Aug 4, after a 6+ week gap) → 8-day gap → D114 (Aug 12) → <strong>3-day gap</strong> → D117 (Aug 15). The D114→D117 interval is the best spacing since the restart — worth protecting rather than sliding back to week-plus gaps.</p>
+      <div class="rule-box training"><span class="lbl">Most recent session</span>
+        Bodyweight squats ×15 · Squats w/10kg DB ×14 · Leg extension (EMS) 29kg ×12/×12 · Leg press (EMS) 95kg ×12 · Lying leg raises 25/16 · Chest press (non-EMS) 23kg ×12 — up 2 reps on D114, slight ache again, correctly stopped at 1 set.
+      </div>
+      <div class="tablewrap">
+      <table>
+        <tr><th>Lift</th><th>Pre-injury PB</th><th>Current</th></tr>
+        <tr><td>Leg press</td><td>125kg ×12</td><td class="num">95kg ×12–13 (EMS)</td></tr>
+        <tr><td>Leg extension</td><td>43kg ×12</td><td class="num">29kg ×12/12 (EMS)</td></tr>
+        <tr><td>Chest press</td><td>36kg ×12</td><td class="num">23kg ×12 — capped by ache, not strength</td></tr>
+        <tr><td>Leg curl</td><td>36kg ×10</td><td class="num">on hold, not yet retested</td></tr>
+        <tr><td>Calf raises</td><td>35kg ×20</td><td class="num">30kg ×20/16</td></tr>
+        <tr><td>RDL</td><td>40kg ×10</td><td class="num">on hold</td></tr>
+      </table>
+      </div>
+      <p style="margin-top:12px; font-size:.72rem; letter-spacing:.05em; text-transform:uppercase; color:var(--text-faint);">On hold until cleared</p>
+      <div class="chiplist">
+        <span class="chip">Lat pulldown</span><span class="chip">Cable row</span><span class="chip">Shoulder press</span>
+        <span class="chip">Lateral raises</span><span class="chip">Pec deck</span><span class="chip">Tricep pushdown</span>
+        <span class="chip">Upper-body EMS</span><span class="chip">Single-arm pulling</span>
+      </div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="card">
+      <h2>Supplement schedule <span class="badge good">ARV streak intact</span></h2>
+      <ul class="sched">
+        <li><span class="time">07:00</span><span class="what">UC-II 40mg, fasted<span class="note">+ 500ml water · flexible on early-start days</span></span></li>
+        <li><span class="time">10:00</span><span class="what">ARV (DTG + FTC) + Whey ×2 scoops + Creatine + Omega-3 ×3<span class="note">anchor dose — ~54g protein</span></span></li>
+        <li><span class="time">10:30</span><span class="what">Citrulline Malate 6–9g + Pine Bark ×3<span class="note">Pine Bark finishing existing stock only</span></span></li>
+        <li><span class="time">14:00+</span><span class="what">Centrum Men, CoQ10, Slow Bone, Urolithin A 600mg, MitoPrime 5mg, Briyo D3 2000IU<span class="note">min. 4hrs after DTG — chelation rule</span></span></li>
+        <li><span class="time">Evening</span><span class="what">Omega-3 ×2<span class="note">total 5/day</span></span></li>
+        <li><span class="time">21:00</span><span class="what">Casein ×2 scoops + MagGly ×2 + Iron Bisglycinate 28mg<span class="note">anchor dose — ~40–44g protein · space iron from MagGly 1–2hrs</span></span></li>
+        <li><span class="time">Topical</span><span class="what">Vovitra gel, right shoulder + hot fomentation<span class="note">daily, per prescription</span></span></li>
+        <li><span class="time">Eyes</span><span class="what">Durafresh drops<span class="note">both eyes, 2×/day</span></span></li>
+      </ul>
+      <div class="rule-box neutral"><span class="lbl">Standing rules</span>MagGly night only · UC-II always fasted · no Moov on left forearm · statin declined, lipid recheck overdue.</div>
+    </section>
+
+    <section class="card">
+      <h2>Nutrition <span class="n">— protein vs ${state.proteinTarget}g target</span></h2>
+      ${renderChart(state)}
+      <p>2200 kcal target (2400 on gym days). Anchor doses (whey 10am, casein 9pm) plus protein-forward lunches are what's driving the recent hit-rate.</p>
+    </section>
+
+    <section class="card">
+      <h2>EMS &amp; sleep notes</h2>
+      <p><strong>EMS protocol:</strong> ~20 min on the YDSC suit. Legs/glutes/core pads at 25–28. Shoulder and chest pads must be verified at zero <em>before</em> starting — missed once on D114, caught mid-session.</p>
+      <p><strong>Sleep:</strong> fragmented through D110, waking 1–4:30am regardless of bedtime — possibly stress or the Nandyal court case rather than bedtime discipline.</p>
+      <p><strong>Shift:</strong> work ends 11pm–midnight, so realistic bedtime is ~11:30pm–12:30am, not "before 11pm."</p>
+    </section>
+  </div>
+</div>
+
+<section class="card" style="margin-top:16px;">
+  <h2>Daily log <span class="n">— most recent first</span></h2>
+  ${renderLog(state)}
+</section>
+
+<footer>
+  <span>Protocol Day ${state.currentDay} · updated ${esc(state.lastUpdatedLabel)} — synced to your Google Drive.</span>
+  <span>Private to your account.</span>
+</footer>`;
+}
+
+// ---------------- Drive persistence ----------------
+function getStoredToken(){
+  const tok = sessionStorage.getItem(SS_TOKEN);
+  const exp = Number(sessionStorage.getItem(SS_TOKEN_EXP) || 0);
+  if(tok && Date.now() < exp) return tok;
+  return null;
+}
+function storeToken(tok, expiresInSec){
+  sessionStorage.setItem(SS_TOKEN, tok);
+  sessionStorage.setItem(SS_TOKEN_EXP, String(Date.now() + (expiresInSec*1000) - 60000));
+}
+
+async function driveFetch(url, opts){
+  const token = getStoredToken();
+  if(!token) throw {code:'no_token'};
+  opts = opts || {};
+  opts.headers = Object.assign({}, opts.headers, {Authorization: 'Bearer ' + token});
+  const res = await fetch(url, opts);
+  if(res.status === 401) throw {code:'unauthorized'};
+  return res;
+}
+
+async function findOrCreateStateFile(){
+  const cached = localStorage.getItem(LS_FILE_ID);
+  if(cached){
+    const check = await driveFetch(`https://www.googleapis.com/drive/v3/files/${cached}?fields=id,trashed`);
+    if(check.ok){
+      const meta = await check.json();
+      if(!meta.trashed) return cached;
+    }
+  }
+  const q = encodeURIComponent(`name='${STATE_FILENAME}' and trashed=false`);
+  const listRes = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,name)`);
+  const list = await listRes.json();
+  if(list.files && list.files.length){
+    localStorage.setItem(LS_FILE_ID, list.files[0].id);
+    return list.files[0].id;
+  }
+  const boundary = 'obito-boundary-' + Math.random().toString(36).slice(2);
+  const metadata = {name: STATE_FILENAME, mimeType: 'application/json'};
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+    `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(DEFAULT_STATE)}\r\n` +
+    `--${boundary}--`;
+  const createRes = await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+    method: 'POST',
+    headers: {'Content-Type': `multipart/related; boundary=${boundary}`},
+    body
+  });
+  const created = await createRes.json();
+  localStorage.setItem(LS_FILE_ID, created.id);
+  return created.id;
+}
+
+async function loadState(fileId){
+  const res = await driveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+  if(!res.ok) throw {code:'load_failed'};
+  return res.json();
+}
+
+async function saveState(fileId, state){
+  const res = await driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(state)
+  });
+  if(!res.ok) throw {code:'save_failed'};
+  return true;
+}
+
+// ---------------- app boot / auth ----------------
+let STATE = null;
+let fileId = null;
+let tokenClient = null;
+
+const gate = document.getElementById('gate');
+const appEl = document.getElementById('app');
+const gateMsg = document.getElementById('gateMsg');
+const connectBtn = document.getElementById('connectBtn');
+const dlg = document.getElementById('logDialog');
+const form = document.getElementById('logForm');
+const fab = document.getElementById('fabBtn');
+const dlgMsg = document.getElementById('dlgMsg');
+const dlgSaveBtn = document.getElementById('dlgSaveBtn');
+document.getElementById('dlgCloseBtn').addEventListener('click', () => dlg.close());
+fab.addEventListener('click', openDialog);
+
+function paint(){
+  appEl.innerHTML = renderApp(STATE);
+  document.getElementById('logBtn').addEventListener('click', openDialog);
+}
+
+function openDialog(){
+  dlgMsg.textContent = '';
+  document.getElementById('f-date').valueAsDate = new Date();
+  dlg.showModal();
+}
+
+function setSync(mode){
+  const tag = document.getElementById('syncTag');
+  const txt = document.getElementById('syncTxt');
+  if(!tag) return;
+  tag.classList.remove('saving','err');
+  if(mode==='saving'){ tag.classList.add('saving'); txt.textContent = 'Saving…'; }
+  else if(mode==='err'){ tag.classList.add('err'); txt.textContent = 'Save failed'; }
+  else { txt.textContent = 'Synced'; }
+}
+
+async function afterAuth(){
+  try{
+    fileId = await findOrCreateStateFile();
+    STATE = await loadState(fileId);
+    gate.hidden = true;
+    appEl.hidden = false;
+    fab.hidden = false;
+    paint();
+  }catch(err){
+    console.error(err);
+    gateMsg.textContent = "Couldn't reach Google Drive — try Connect again.";
+  }
+}
+
+function initGis(){
+  if(!(window.google && google.accounts && google.accounts.oauth2)){
+    setTimeout(initGis, 200);
+    return;
+  }
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: DRIVE_SCOPE,
+    callback: (resp) => {
+      if(resp.error){ gateMsg.textContent = 'Google sign-in failed: ' + resp.error; return; }
+      storeToken(resp.access_token, resp.expires_in);
+      afterAuth();
+    }
+  });
+  const existing = getStoredToken();
+  if(existing) afterAuth();
+}
+
+connectBtn.addEventListener('click', () => {
+  if(GOOGLE_CLIENT_ID.indexOf('YOUR_CLIENT_ID') === 0){
+    gateMsg.textContent = 'Set GOOGLE_CLIENT_ID in index.html first — see the setup steps.';
+    return;
+  }
+  gateMsg.textContent = '';
+  tokenClient.requestAccessToken({prompt: getStoredToken() ? '' : 'consent'});
+});
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  dlgSaveBtn.disabled = true;
+  dlgMsg.style.color = 'var(--text-dim)';
+  dlgMsg.textContent = 'Saving…';
+  setSync('saving');
+
+  const fd = new FormData(form);
+  const dateVal = fd.get('date');
+  const dateObj = new Date(dateVal + 'T00:00:00');
+  const dateLabel = dateObj.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+  const gym = fd.get('gym') || '';
+  const proteinRaw = fd.get('protein');
+  const protein = proteinRaw ? parseInt(proteinRaw, 10) : null;
+  const shoulder = (fd.get('shoulder')||'').trim();
+  const notes = (fd.get('notes')||'').trim();
+  const arv = fd.get('arv') === 'on';
+
+  const newDay = STATE.currentDay + 1;
+  const entry = {
+    day: newDay, date: dateLabel, gym, protein,
+    proteinLabel: protein ? protein+'g' : 'no total logged',
+    notes: notes || (gym ? 'Gym: '+gym+'.' : 'Rest day.')
+  };
+
+  const newState = JSON.parse(JSON.stringify(STATE));
+  newState.log.unshift(entry);
+  newState.currentDay = newDay;
+  newState.arvStreak = arv ? STATE.arvStreak + 1 : 0;
+  if(gym) newState.lastSession = {day:newDay, date:dateLabel, type:gym};
+  if(shoulder) newState.shoulderNote = shoulder;
+  newState.lastUpdatedLabel = dateLabel + ', 2026';
+
+  try{
+    await saveState(fileId, newState);
+  }catch(err){
+    console.error('save failed', err);
+    setSync('err');
+    dlgSaveBtn.disabled = false;
+    if(err && err.code === 'unauthorized'){
+      dlgMsg.textContent = 'Session expired — reconnecting…';
+      tokenClient.requestAccessToken({prompt: ''});
+    } else {
+      dlgMsg.textContent = "Couldn't save — check your connection and try again.";
+    }
+    return;
+  }
+
+  // Saved to Drive successfully — UI cleanup below is best-effort and must
+  // never re-label a successful save as failed if one of these throws.
+  STATE = newState;
+  try{ paint(); }catch(e){ console.error('paint after save failed', e); }
+  setSync('ok');
+  try{ dlg.close(); }catch(e){ console.error('dialog close failed', e); }
+  form.reset();
+});
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+
+initGis();
+</script>
+</body>
+</html>
