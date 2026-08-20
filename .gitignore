@@ -3,5 +3,8 @@ package.json
 package-lock.json
 test-pwa.mjs
 test-pwa-full.mjs
+test-docsync.mjs
+test-real-doc.mjs
+real-d117-sample.txt
 extracted-*.js
 gen-icons.mjs

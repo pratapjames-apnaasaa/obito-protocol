@@ -104,6 +104,13 @@
 
   .stale-banner{ display:flex; align-items:center; gap:10px; background:var(--warn-soft); color:var(--warn); border-radius:12px; padding:10px 14px; font-size:.82rem; margin-bottom:20px; font-weight:500; }
   .privacy-tag{ margin-left:auto; font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; color:var(--text-faint); border:1px solid var(--border); border-radius:999px; padding:3px 10px; white-space:nowrap; background:var(--surface); }
+  .syncdocbtn{
+    font-size:.72rem; font-weight:700; color:var(--warn); background:var(--surface); border:1px solid var(--warn);
+    border-radius:999px; padding:5px 12px; cursor:pointer; white-space:nowrap;
+  }
+  .syncdocbtn:disabled{opacity:.6; cursor:default;}
+  .syncdoc-msg{margin:-12px 0 20px; font-size:.78rem; color:var(--text-dim);}
+  .syncdoc-msg.err{color:var(--critical);}
 
   .rings{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:14px;}
   @media (max-width:720px){.rings{grid-template-columns:1fr;}}
@@ -271,7 +278,7 @@
       Connect Google Drive
     </button>
     <p class="gate-msg" id="gateMsg"></p>
-    <p class="gate-note">Uses the Drive "app data" scope — this app can only see files it creates itself, never the rest of your Drive.</p>
+    <p class="gate-note">Can write only its own dashboard file. It can also <em>read</em> your Drive to find your Obito Protocol docs from claude.ai and pull in new entries — never write or delete anything outside its own file.</p>
   </div>
 </div>
 
@@ -325,11 +332,16 @@
    browser-side flow.
 ==================================================================== */
 const GOOGLE_CLIENT_ID = "767426500870-18f4ppqvfekeopu37gnqjn5msn85tnu9.apps.googleusercontent.com";
-const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly";
+// Bump this whenever DRIVE_SCOPE grows — invalidates any cached token that
+// predates the new permission so we don't silently keep using one that's
+// missing a scope the app now needs.
+const SCOPE_VERSION = 2;
 const STATE_FILENAME = "obito-protocol-state.json";
 const LS_FILE_ID = "obito_drive_file_id";
 const LS_TOKEN = "obito_access_token";
 const LS_TOKEN_EXP = "obito_token_expiry";
+const LS_TOKEN_SCOPE_V = "obito_token_scope_v";
 
 const DEFAULT_STATE = {
   profile: {name:"Pratap James", age:52, weight:"67kg", height:"177.8cm", location:"Nizampet, Hyderabad", day1:"Apr 23, 2026"},
@@ -560,8 +572,10 @@ function renderApp(state){
 <div class="stale-banner">
   <span>⚠</span>
   <span>${stale} Day ${state.currentDay} of the protocol, started ${esc(state.profile.day1)}.</span>
+  <button class="syncdocbtn" id="syncDocBtn" type="button">Sync from claude.ai</button>
   <span class="privacy-tag">🔒 your Drive only</span>
 </div>
+<div class="syncdoc-msg" id="syncDocMsg" hidden></div>
 
 ${renderRings(state)}
 ${renderTiles(state)}
@@ -656,12 +670,14 @@ ${renderTiles(state)}
 function getStoredToken(){
   const tok = localStorage.getItem(LS_TOKEN);
   const exp = Number(localStorage.getItem(LS_TOKEN_EXP) || 0);
-  if(tok && Date.now() < exp) return tok;
+  const scopeV = Number(localStorage.getItem(LS_TOKEN_SCOPE_V) || 0);
+  if(tok && Date.now() < exp && scopeV === SCOPE_VERSION) return tok;
   return null;
 }
 function storeToken(tok, expiresInSec){
   localStorage.setItem(LS_TOKEN, tok);
   localStorage.setItem(LS_TOKEN_EXP, String(Date.now() + (expiresInSec*1000) - 60000));
+  localStorage.setItem(LS_TOKEN_SCOPE_V, String(SCOPE_VERSION));
 }
 
 async function driveFetch(url, opts){
@@ -722,6 +738,116 @@ async function saveState(fileId, state){
   return true;
 }
 
+// ---------------- sync from the claude.ai "Living Document" ----------------
+async function findLatestProtocolDoc(){
+  const q = encodeURIComponent(`name contains 'Obito Protocol' and mimeType='application/vnd.google-apps.document' and trashed=false`);
+  const res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime desc&pageSize=1&fields=files(id,name,modifiedTime)`);
+  if(!res.ok) throw {code: res.status === 403 ? 'forbidden' : 'search_failed'};
+  const data = await res.json();
+  if(!data.files || !data.files.length) throw {code:'not_found'};
+  return data.files[0];
+}
+
+async function exportDocText(fileId){
+  const res = await driveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text%2Fplain`);
+  if(!res.ok) throw {code:'export_failed'};
+  return res.text();
+}
+
+function shortDate(str){
+  const d = new Date(String(str).trim());
+  if(isNaN(d)) return String(str).trim();
+  return d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+}
+function shortDateFromISO(iso){
+  const d = new Date(iso + 'T00:00:00');
+  if(isNaN(d)) return iso;
+  return d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+}
+
+// Best-effort parse of the claude.ai-generated "Living Document" — the doc's
+// section headings have stayed consistent enough (PROFILE, FROZEN SHOULDER,
+// ARV MEDICATION, DAILY LOG SUMMARY, LAST UPDATED) to extract reliably, but
+// it's still free-text prose written by an LLM each session, so every field
+// here is optional: if a pattern doesn't match, we just skip it rather than
+// guess or throw.
+function parseProtocolDoc(text){
+  const out = {entries: []};
+
+  const dayM = text.match(/Current Day:\s*D(\d+)\s*\(([^)]+)\)/i);
+  if(dayM){ out.currentDay = parseInt(dayM[1],10); out.dateLabel = shortDate(dayM[2]); }
+
+  const day1M = text.match(/Protocol Day 1:\s*([^|\n]+)/i);
+  if(day1M) out.day1 = shortDate(day1M[1]);
+
+  const arvM = text.match(/ARV STREAK:.*?(\d+)\s+days?\s+unbroken/i);
+  if(arvM) out.arvStreak = parseInt(arvM[1],10);
+
+  const statusM = text.match(/STATUS AS OF[^:\n]*:\s*([\s\S]+?)(?=\n\s*\n|\n#|$)/i);
+  if(statusM) out.shoulderNote = statusM[1].replace(/\s+/g,' ').trim().slice(0,400);
+
+  const lastUpdM = text.match(/LAST UPDATED\s*\n+\s*Day\s*\d+\s*[—-]\s*([^\n]+)/i);
+  if(lastUpdM) out.lastUpdatedLabel = shortDate(lastUpdM[1]) + ', 2026';
+
+  const logSection = text.split(/#+\s*DAILY LOG SUMMARY/i)[1];
+  if(logSection){
+    const body = logSection.split(/\n#+\s/)[0];
+    const lineRe = /(\d{4}-\d{2}-\d{2})\s*\|\s*D(\d+)\s*\|\s*(.+)/g;
+    let m;
+    while((m = lineRe.exec(body))){
+      const day = parseInt(m[2],10);
+      const notes = m[3].trim();
+      const totalM = notes.match(/TOTAL\s*~?\s*(\d+)(?:\s*[–-]\s*(\d+))?\s*g/i);
+      let protein = null, proteinLabel = null;
+      if(totalM){
+        const lo = parseInt(totalM[1],10), hi = totalM[2] ? parseInt(totalM[2],10) : lo;
+        protein = Math.round((lo+hi)/2);
+        proteinLabel = totalM[2] ? `${lo}–${hi}g` : `${lo}g`;
+      }
+      let gym = '';
+      if(/\bEMS\b/i.test(notes)) gym = 'EMS';
+      else if(!/\bno gym\b/i.test(notes) && !/\bidle\b/i.test(notes) && /\bgym\b/i.test(notes)) gym = 'Gym';
+      out.entries.push({
+        day, date: shortDateFromISO(m[1]), gym, protein,
+        proteinLabel: proteinLabel || (protein ? protein+'g' : 'no total logged'),
+        notes
+      });
+    }
+  }
+  return out;
+}
+
+async function syncFromProtocolDoc(){
+  const docMeta = await findLatestProtocolDoc();
+  const text = await exportDocText(docMeta.id);
+  const parsed = parseProtocolDoc(text);
+
+  const newState = JSON.parse(JSON.stringify(STATE));
+  const existingDays = new Set(newState.log.map(d => d.day));
+  const added = [];
+  parsed.entries.forEach(e => {
+    if(!existingDays.has(e.day)){
+      newState.log.push(e);
+      existingDays.add(e.day);
+      added.push(e.day);
+    }
+  });
+  newState.log.sort((a,b) => b.day - a.day);
+
+  const maxEntryDay = newState.log.length ? newState.log[0].day : newState.currentDay;
+  const docIsNewer = !!(parsed.currentDay && parsed.currentDay > newState.currentDay);
+  newState.currentDay = Math.max(newState.currentDay, parsed.currentDay || 0, maxEntryDay);
+  if(docIsNewer){
+    if(parsed.arvStreak != null) newState.arvStreak = parsed.arvStreak;
+    if(parsed.shoulderNote) newState.shoulderNote = parsed.shoulderNote;
+    if(parsed.lastUpdatedLabel) newState.lastUpdatedLabel = parsed.lastUpdatedLabel;
+  }
+  const recentGym = newState.log.find(d => d.gym);
+  if(recentGym) newState.lastSession = {day: recentGym.day, date: recentGym.date, type: recentGym.gym};
+
+  return {newState, added, docName: docMeta.name};
+}
+
 // ---------------- app boot / auth ----------------
 let STATE = null;
 let fileId = null;
@@ -772,6 +898,41 @@ async function afterAuth(){
   }catch(err){
     console.error(err);
     gateMsg.textContent = "Couldn't reach Google Drive — try Connect again.";
+    return;
+  }
+  // Opportunistic — every time the app opens, check whether a newer
+  // claude.ai protocol doc has entries we don't have yet. Quiet on
+  // failure (e.g. no doc yet); only speaks up when it finds something.
+  runDocSync({silent: true, onMsg: (text, isErr) => { if(!isErr) showSyncDocMsg(text); }});
+}
+
+function showSyncDocMsg(text, isErr){
+  const el = document.getElementById('syncDocMsg');
+  if(!el) return;
+  el.textContent = text;
+  el.hidden = false;
+  el.classList.toggle('err', !!isErr);
+}
+
+async function runDocSync(opts){
+  opts = opts || {};
+  try{
+    const {newState, added, docName} = await syncFromProtocolDoc();
+    if(added.length){
+      const ok = await saveAndApply(newState);
+      if(ok && opts.onMsg){
+        opts.onMsg(`Synced ${added.length} new day${added.length===1?'':'s'} from "${docName}".`, false);
+      }
+    } else if(opts.onMsg){
+      opts.onMsg('Already up to date with your latest claude.ai protocol doc.', false);
+    }
+  }catch(err){
+    console.error('doc sync failed', err);
+    if(opts.silent) return; // quiet background check — don't alarm on a routine miss
+    let msg = "Couldn't sync from claude.ai — try again.";
+    if(err && err.code === 'not_found') msg = 'No "Obito Protocol" doc found in your Drive yet.';
+    if(err && err.code === 'forbidden') msg = 'Needs Drive read access — reconnect via the gate screen.';
+    if(opts.onMsg) opts.onMsg(msg, true);
   }
 }
 
@@ -898,6 +1059,13 @@ appEl.addEventListener('click', (e) => {
   if(suppBtn){
     const li = suppBtn.closest('[data-supp-id]');
     if(li) onSuppToggle(li.dataset.suppId);
+    return;
+  }
+  const syncBtn = e.target.closest('#syncDocBtn');
+  if(syncBtn){
+    syncBtn.disabled = true;
+    showSyncDocMsg('Checking claude.ai for the latest entry…');
+    runDocSync({onMsg: showSyncDocMsg}).finally(() => { syncBtn.disabled = false; });
   }
 });
 
