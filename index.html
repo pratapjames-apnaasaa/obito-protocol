@@ -202,7 +202,8 @@
   .wdot-col{display:flex; flex-direction:column; align-items:center; gap:6px;}
   .wdot{width:22px; height:22px; border-radius:50%; border:2px solid var(--border); background:var(--surface-2);}
   .wdot.on{background:var(--c-training); border-color:var(--c-training);}
-  .wdot-col span{font-size:.64rem; color:var(--text-faint); font-family:"IBM Plex Mono",monospace;}
+  .wdot-col .wdot-dow{font-size:.62rem; letter-spacing:.03em; text-transform:uppercase; color:var(--text-faint);}
+  .wdot-col .wdot-dom{font-size:.7rem; font-weight:700; color:var(--text-dim); font-family:"IBM Plex Mono",monospace;}
 
   /* protein trend SVG chart */
   .trend-chart{width:100%; height:140px; overflow:visible;}
@@ -533,8 +534,16 @@ function renderWeeklyDots(state){
   const days = lastSevenDays(state);
   return `<div class="week-dots">${days.map(d => {
     const has = d && d.gym;
-    const label = d ? ('D'+d.day) : '';
-    return `<div class="wdot-col"><div class="wdot${has?' on':''}" title="${d ? esc(d.date) : ''}"></div><span>${label}</span></div>`;
+    let dow = '', dom = '';
+    if(d){
+      const parsed = new Date(d.date + ', 2026');
+      if(!isNaN(parsed)){ dow = parsed.toLocaleDateString('en-US', {weekday:'short'}); dom = parsed.getDate(); }
+    }
+    return `<div class="wdot-col">
+      <span class="wdot-dow">${dow}</span>
+      <div class="wdot${has?' on':''}" title="${d ? esc(d.date) : ''}"></div>
+      <span class="wdot-dom">${dom}</span>
+    </div>`;
   }).join('')}</div>`;
 }
 
