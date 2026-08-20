@@ -109,8 +109,10 @@
     border-radius:999px; padding:5px 12px; cursor:pointer; white-space:nowrap;
   }
   .syncdocbtn:disabled{opacity:.6; cursor:default;}
-  .syncdoc-msg{margin:-12px 0 20px; font-size:.78rem; color:var(--text-dim);}
+  .syncdoc-msg{margin:-12px 0 8px; font-size:.78rem; color:var(--text-dim);}
   .syncdoc-msg.err{color:var(--critical);}
+  .disconnect-row{margin:0 0 20px; text-align:right;}
+  .linklike{background:none; border:none; padding:0; font-size:.72rem; color:var(--text-faint); text-decoration:underline; cursor:pointer;}
 
   .rings{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:14px;}
   @media (max-width:720px){.rings{grid-template-columns:1fr;}}
@@ -576,6 +578,7 @@ function renderApp(state){
   <span class="privacy-tag">🔒 your Drive only</span>
 </div>
 <div class="syncdoc-msg" id="syncDocMsg" hidden></div>
+<p class="disconnect-row"><button type="button" id="disconnectBtn" class="linklike">Disconnect Google Drive</button></p>
 
 ${renderRings(state)}
 ${renderTiles(state)}
@@ -1066,8 +1069,27 @@ appEl.addEventListener('click', (e) => {
     syncBtn.disabled = true;
     showSyncDocMsg('Checking claude.ai for the latest entry…');
     runDocSync({onMsg: showSyncDocMsg}).finally(() => { syncBtn.disabled = false; });
+    return;
   }
+  const discBtn = e.target.closest('#disconnectBtn');
+  if(discBtn) disconnectDrive();
 });
+
+// Forces a completely fresh Google sign-in + consent next time — useful
+// after a scope change, or if something about the stored session seems
+// stuck/wrong. Only clears auth; the dashboard's own Drive file (and its
+// data) is untouched.
+function disconnectDrive(){
+  localStorage.removeItem(LS_TOKEN);
+  localStorage.removeItem(LS_TOKEN_EXP);
+  localStorage.removeItem(LS_TOKEN_SCOPE_V);
+  STATE = null;
+  fileId = null;
+  appEl.hidden = true;
+  fab.hidden = true;
+  gate.hidden = false;
+  gateMsg.textContent = '';
+}
 
 // Re-check pending->missed transitions every minute without a full
 // re-render (which would collapse the open daily-log entries).
