@@ -1,4 +1,4 @@
-const CACHE = 'obito-shell-v1';
+const CACHE = 'obito-shell-v2';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png',
@@ -17,6 +17,9 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
+// Network-first for the app shell: this app changes often, so correctness
+// beats a few hundred ms of load time. Cache is only a fallback for when
+// there's no network at all — never the primary source while online.
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   // Never intercept Google auth / Drive API calls — always go to the network.
@@ -24,17 +27,14 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
 
   e.respondWith(
-    caches.match(e.request).then((cached) => {
-      const network = fetch(e.request)
-        .then((res) => {
-          if (res && res.status === 200) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(e.request, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    fetch(e.request)
+      .then((res) => {
+        if (res && res.status === 200) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(e.request))
   );
 });
