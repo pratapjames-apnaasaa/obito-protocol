@@ -751,13 +751,13 @@ async function saveState(fileId, state){
 }
 
 // ---------------- sync from the claude.ai "Living Document" ----------------
-async function findLatestProtocolDoc(){
+async function listProtocolDocs(){
   const q = encodeURIComponent(`name contains 'Obito Protocol' and mimeType='application/vnd.google-apps.document' and trashed=false`);
-  const res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime desc&pageSize=1&fields=files(id,name,modifiedTime)`);
+  const res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime desc&pageSize=40&fields=files(id,name,modifiedTime)`);
   if(!res.ok) throw {code: res.status === 403 ? 'forbidden' : 'search_failed'};
   const data = await res.json();
   if(!data.files || !data.files.length) throw {code:'not_found'};
-  return data.files[0];
+  return data.files;
 }
 
 async function exportDocText(fileId){
@@ -829,35 +829,100 @@ function parseProtocolDoc(text){
   return out;
 }
 
-async function syncFromProtocolDoc(){
-  const docMeta = await findLatestProtocolDoc();
-  const text = await exportDocText(docMeta.id);
-  const parsed = parseProtocolDoc(text);
+// Newer claude.ai sessions write one "Obito Protocol — Daily Log — <weekday>
+// <Mon D>, <YYYY> (...)" doc per day (or per two days, split by "=== TUE OCT
+// 27 ===" markers) instead of one living document. Day numbers are counted
+// from protocol start (Apr 23 2026), which matches the D### the docs use.
+const PROTOCOL_DAY0 = new Date('2026-04-23T00:00:00');
+function protocolDayFor(date){ return Math.round((date - PROTOCOL_DAY0) / 86400000); }
 
+function parseDailyLogDoc(title, text){
+  const yM = title.match(/(\d{4})/);
+  const year = yM ? yM[1] : '2026';
+  const tM = title.match(/([A-Za-z]{3,9})\s+(\d{1,2}),\s*(\d{4})/);
+  const parenM = title.match(/\(([^)]*)\)\s*$/);
+  const paren = parenM ? parenM[1] : '';
+
+  const sections = [];
+  const parts = text.split(/\n[ \t]*[\\=]+[ \t]*([A-Za-z]{3}\s+[A-Za-z]{3}\s+\d{1,2})([^=\\\n]*)[\\=]+[ \t]*\n/);
+  if(parts.length > 1){
+    for(let i = 1; i + 2 < parts.length + 1; i += 3){
+      const d = new Date(parts[i].replace(/^[A-Za-z]{3}\s+/, '') + ', ' + year);
+      if(!isNaN(d)) sections.push({date: d, suffix: parts[i+1] || '', body: parts[i+2] || ''});
+    }
+  } else if(tM){
+    const d = new Date(`${tM[1]} ${tM[2]}, ${tM[3]}`);
+    if(!isNaN(d)) sections.push({date: d, suffix: paren, body: text});
+  }
+
+  return sections.map(s => {
+    const lead = s.body.split(/\n[ \t]*NEXT\b/)[0];
+    let protein = null;
+    const pM = s.body.match(/(?:DAY TOTAL|TOTALS?)\s*(?:\([^)]*\))?\s*:?[^\n]*?~\s*(\d+)\s*g\s*protein/i);
+    if(pM) protein = parseInt(pM[1], 10);
+
+    let gym = '';
+    const isRest = /\brest\b|no workout|no gym/i.test(s.suffix) || /rest day|no workout|no gym/i.test(lead.slice(0, 300));
+    if(!isRest){
+      const gM = lead.match(/\b(EMS(?:\s*\+\s*lower body)?|Upper\s+[AB])\b/i);
+      if(gM) gym = gM[1].replace(/^upper/i, 'Upper').replace(/^ems/i, 'EMS');
+    }
+    return {
+      day: protocolDayFor(s.date),
+      date: s.date.toLocaleDateString('en-US', {month:'short', day:'numeric'}),
+      gym, protein,
+      proteinLabel: protein ? `~${protein}g` : 'no total logged',
+      notes: s.body.replace(/\s+/g, ' ').trim().slice(0, 1100)
+    };
+  });
+}
+
+async function syncFromProtocolDoc(){
+  const docs = await listProtocolDocs();
   const newState = JSON.parse(JSON.stringify(STATE));
+  const synced = new Set(newState.syncedDocIds || []);
   const existingDays = new Set(newState.log.map(d => d.day));
   const added = [];
-  parsed.entries.forEach(e => {
-    if(!existingDays.has(e.day)){
-      newState.log.push(e);
-      existingDays.add(e.day);
-      added.push(e.day);
-    }
-  });
+  let livingDone = false, fetched = 0, dirty = false, topLevel = null, docName = '';
+
+  for(const doc of docs){            // newest-modified first
+    if(synced.has(doc.id)) continue;
+    if(fetched >= 15) break;         // keep each run bounded; the rest next time
+    let entries = [];
+    if(/hand\s*off/i.test(doc.name)){
+      synced.add(doc.id); dirty = true; continue;
+    } else if(/daily log/i.test(doc.name)){
+      entries = parseDailyLogDoc(doc.name, await exportDocText(doc.id)); fetched++;
+    } else if(/living document/i.test(doc.name)){
+      if(livingDone){ continue; }
+      livingDone = true;
+      const parsed = parseProtocolDoc(await exportDocText(doc.id)); fetched++;
+      entries = parsed.entries;
+      topLevel = parsed;
+    } else { continue; }
+    synced.add(doc.id); dirty = true;
+    entries.forEach(e => {
+      if(!existingDays.has(e.day)){
+        newState.log.push(e); existingDays.add(e.day); added.push(e.day);
+        docName = docName || doc.name;
+      }
+    });
+  }
   newState.log.sort((a,b) => b.day - a.day);
+  newState.syncedDocIds = Array.from(synced);
 
   const maxEntryDay = newState.log.length ? newState.log[0].day : newState.currentDay;
-  const docIsNewer = !!(parsed.currentDay && parsed.currentDay > newState.currentDay);
-  newState.currentDay = Math.max(newState.currentDay, parsed.currentDay || 0, maxEntryDay);
-  if(docIsNewer){
-    if(parsed.arvStreak != null) newState.arvStreak = parsed.arvStreak;
-    if(parsed.shoulderNote) newState.shoulderNote = parsed.shoulderNote;
-    if(parsed.lastUpdatedLabel) newState.lastUpdatedLabel = parsed.lastUpdatedLabel;
+  if(topLevel && topLevel.currentDay && topLevel.currentDay > newState.currentDay){
+    if(topLevel.arvStreak != null) newState.arvStreak = topLevel.arvStreak;
+    if(topLevel.shoulderNote) newState.shoulderNote = topLevel.shoulderNote;
+    if(topLevel.lastUpdatedLabel) newState.lastUpdatedLabel = topLevel.lastUpdatedLabel;
   }
+  newState.currentDay = Math.max(newState.currentDay, maxEntryDay);
+  if(added.length && newState.log[0]) newState.lastUpdatedLabel = newState.log[0].date + ', 2026';
   const recentGym = newState.log.find(d => d.gym);
   if(recentGym) newState.lastSession = {day: recentGym.day, date: recentGym.date, type: recentGym.gym};
 
-  return {newState, added, docName: docMeta.name};
+  return {newState, added, dirty, docName: docName || 'your Daily Log docs'};
 }
 
 // ---------------- app boot / auth ----------------
@@ -929,11 +994,13 @@ function showSyncDocMsg(text, isErr){
 async function runDocSync(opts){
   opts = opts || {};
   try{
-    const {newState, added, docName} = await syncFromProtocolDoc();
-    if(added.length){
+    const {newState, added, dirty, docName} = await syncFromProtocolDoc();
+    if(added.length || dirty){
       const ok = await saveAndApply(newState);
       if(ok && opts.onMsg){
-        opts.onMsg(`Synced ${added.length} new day${added.length===1?'':'s'} from "${docName}".`, false);
+        opts.onMsg(added.length
+          ? `Synced ${added.length} new day${added.length===1?'':'s'} from "${docName}".`
+          : 'Already up to date with your latest claude.ai protocol docs.', false);
       }
     } else if(opts.onMsg){
       opts.onMsg('Already up to date with your latest claude.ai protocol doc.', false);
